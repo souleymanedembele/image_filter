@@ -2,7 +2,7 @@
 build/
 cmake-build-debug/
 cmake-build-release/
-test2014*
-test2014_out/*
+test2014/
+test2014_out/
 .idea/
 .vscode/

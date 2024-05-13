@@ -1,3 +1,8 @@
+/**
+ * Cpp program by Souleymane Dembele on 4/25/24.
+ *
+ */
+
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <chrono>
@@ -13,6 +18,7 @@
 #endif
 
 namespace fs = std::filesystem;
+
 using namespace cv;
 using namespace std;
 
@@ -42,52 +48,37 @@ double getSSIM(const Mat& i1, const Mat& i2) {
     const double C1 = 6.5025, C2 = 58.5225;
     int d = CV_32F;
 
-    // Convert images to float
     Mat I1, I2;
     i1.convertTo(I1, d);
     i2.convertTo(I2, d);
 
-    // Ensure the images are the same size and type
     if (I1.size() != I2.size() || I1.type() != I2.type()) {
         cerr << "Error: Images must be of the same size and type." << endl;
         return -1;
     }
 
-    // Squared images
     Mat I2_2 = I2.mul(I2), I1_2 = I1.mul(I1), I1_I2 = I1.mul(I2);
-
-    // Mean of images
-    Mat mu1, mu2;
+    Mat mu1, mu2, mu1_2, mu2_2, mu1_mu2, sigma1_2, sigma2_2, sigma12;
     GaussianBlur(I1, mu1, Size(11, 11), 1.5);
     GaussianBlur(I2, mu2, Size(11, 11), 1.5);
-
-    // Mean of squares
-    Mat mu1_2 = mu1.mul(mu1), mu2_2 = mu2.mul(mu2), mu1_mu2 = mu1.mul(mu2);
-
-    // Variance of images
-    Mat sigma1_2, sigma2_2, sigma12;
+    mu1_2 = mu1.mul(mu1);
+    mu2_2 = mu2.mul(mu2);
+    mu1_mu2 = mu1.mul(mu2);
     GaussianBlur(I1_2, sigma1_2, Size(11, 11), 1.5);
     sigma1_2 -= mu1_2;
     GaussianBlur(I2_2, sigma2_2, Size(11, 11), 1.5);
     sigma2_2 -= mu2_2;
     GaussianBlur(I1_I2, sigma12, Size(11, 11), 1.5);
     sigma12 -= mu1_mu2;
-
-    // Covariance
     Mat t1 = 2 * mu1_mu2 + C1;
     Mat t2 = 2 * sigma12 + C2;
-
-    // SSIM calculation
     Mat t3, t4, ssim_map;
     multiply(t1, t2, t3);  // Element-wise multiplication
     t4 = (mu1_2 + mu2_2 + C1).mul(sigma1_2 + sigma2_2 + C2); // Element-wise multiplication
-
     divide(t3, t4, ssim_map);  // Element-wise division
     Scalar mssim = mean(ssim_map);  // Average SSIM over the image
-
     return mssim.val[0];
 }
-
 
 class ImageFilter {
 public:
@@ -125,8 +116,24 @@ public:
     SobelEdgeDetection(int sc, int dlt) : scale(sc), delta(dlt) {}
 
     void apply(const Mat& inputImage, Mat& outputImage) override {
-        Mat gray, grad_x, grad_y;
-        cvtColor(inputImage, gray, COLOR_BGR2GRAY);
+//        Mat gray, grad_x, grad_y;
+//        cvtColor(inputImage, gray, COLOR_BGR2GRAY);
+//        Sobel(gray, grad_x, CV_16S, 1, 0, 3, scale, delta, BORDER_DEFAULT);
+//        Sobel(gray, grad_y, CV_16S, 0, 1, 3, scale, delta, BORDER_DEFAULT);
+//        Mat abs_grad_x, abs_grad_y;
+//        convertScaleAbs(grad_x, abs_grad_x);
+//        convertScaleAbs(grad_y, abs_grad_y);
+//        addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0, outputImage);
+
+        Mat gray;
+        // Convert to grayscale if input is color
+        if (inputImage.channels() == 3) {
+            cvtColor(inputImage, gray, COLOR_BGR2GRAY);
+        } else {
+            gray = inputImage;
+        }
+
+        Mat grad_x, grad_y;
         Sobel(gray, grad_x, CV_16S, 1, 0, 3, scale, delta, BORDER_DEFAULT);
         Sobel(gray, grad_y, CV_16S, 0, 1, 3, scale, delta, BORDER_DEFAULT);
         Mat abs_grad_x, abs_grad_y;
@@ -144,8 +151,16 @@ int main() {
     }
 
     dataFile << "Image,Filter,ExecutionTime,MemoryUsage,SSIM,PSNR\n";
-    string imagePath = "./images";  // Ensure this path is correct and accessible
+//    string imagePath = "./images";
+//    string outputDir = "./out";
+    string outputDir = "./test2014_out";
 
+    if (!fs::exists(outputDir)) {
+        fs::create_directory(outputDir);
+    }
+
+
+    string imagePath = "./test2014";
     if (!fs::exists(imagePath)) {
         cerr << "Image directory does not exist: " << imagePath << endl;
         return -1;
@@ -158,7 +173,6 @@ int main() {
             continue;
         }
 
-        // Filters
         GaussianBlurFilter gBlur(9, 0);
         MedianFilter mFilter(5);
         SobelEdgeDetection sEdge(1, 0);
@@ -167,44 +181,68 @@ int main() {
 
         // Apply Gaussian Blur
         auto start = chrono::high_resolution_clock::now();
+        size_t memBefore = getMemoryUsage();
         gBlur.apply(image, imageBlurred);
+        size_t memAfter = getMemoryUsage();
         auto stop = chrono::high_resolution_clock::now();
         auto duration = chrono::duration_cast<chrono::microseconds>(stop - start);
+        double memoryUsed = memAfter > memBefore ? (memAfter - memBefore) : 0;
         double ssim = getSSIM(image, imageBlurred);
         double psnr = cv::PSNR(image, imageBlurred);
-        dataFile << entry.path().filename() << ",Gaussian," << duration.count() << ",," << ssim << "," << psnr << "\n";
+        dataFile << entry.path().filename() << ",Gaussian," << duration.count() << "," << memoryUsed << "," << ssim << "," << psnr << "\n";
 
         // Apply Median Filter
         start = chrono::high_resolution_clock::now();
+        memBefore = getMemoryUsage();
         mFilter.apply(image, imageMedianFiltered);
+        memAfter = getMemoryUsage();
         stop = chrono::high_resolution_clock::now();
         duration = chrono::duration_cast<chrono::microseconds>(stop - start);
+        memoryUsed = memAfter > memBefore ? (memAfter - memBefore) : 0;
         ssim = getSSIM(image, imageMedianFiltered);
         psnr = cv::PSNR(image, imageMedianFiltered);
-        dataFile << entry.path().filename() << ",Median," << duration.count() << ",," << ssim << "," << psnr << "\n";
+        dataFile << entry.path().filename() << ",Median," << duration.count() << "," << memoryUsed << "," << ssim << "," << psnr << "\n";
 
         // Apply Sobel Edge Detection
         start = chrono::high_resolution_clock::now();
+        memBefore = getMemoryUsage();
         sEdge.apply(image, imageSobelEdge);
+        memAfter = getMemoryUsage();
         stop = chrono::high_resolution_clock::now();
         duration = chrono::duration_cast<chrono::microseconds>(stop - start);
-        ssim = getSSIM(image, imageSobelEdge);
+        memoryUsed = memAfter > memBefore ? (memAfter - memBefore) : 0;
+
+        if (imageSobelEdge.empty()) {
+            cerr << "Sobel output is empty, check filter application." << endl;
+            continue;  // Skip this iteration if Sobel failed
+        }
+
         if (image.size() != imageSobelEdge.size() || image.type() != imageSobelEdge.type()) {
             cerr << "Error: Images must be of the same size and type for PSNR calculation." << endl;
-            // Resize or convert types if necessary
             imageSobelEdge.convertTo(imageSobelEdge, image.type());
             resize(imageSobelEdge, imageSobelEdge, image.size());
         }
+
         try {
-            double psnr = cv::PSNR(image, imageSobelEdge);
-            cout << "PSNR: " << psnr << endl;
+            ssim = getSSIM(image, imageSobelEdge);
+            psnr = cv::PSNR(image, imageSobelEdge);
         } catch (const cv::Exception& e) {
-            cerr << "Failed to calculate PSNR: " << e.what() << endl;
+            cerr << "Error calculating SSIM/PSNR: " << e.what() << endl;
+            ssim = -1;  // Indicate failure
+            psnr = -1;
         }
 
-        dataFile << entry.path().filename() << ",Sobel," << duration.count() << ",," << ssim << "," << psnr << "\n";
+        dataFile << entry.path().filename() << ",Sobel," << duration.count() << "," << memoryUsed << "," << ssim << "," << psnr << "\n";
 
         cout << "Processed: " << entry.path().filename() << endl;
+        string outputPath = outputDir + "/Original_" + entry.path().filename().string();
+        imwrite(outputPath, image);
+        outputPath = outputDir + "/Gaussian_" + entry.path().filename().string();
+        imwrite(outputPath, imageBlurred);
+        outputPath = outputDir + "/Median_" + entry.path().filename().string();
+        imwrite(outputPath, imageMedianFiltered);
+        outputPath = outputDir + "/Sobel_" + entry.path().filename().string();
+        imwrite(outputPath, imageSobelEdge);
     }
     dataFile.close();
     cout << "Data recorded successfully." << endl;
