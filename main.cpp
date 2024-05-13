@@ -1,8 +1,9 @@
+#include <opencv2/opencv.hpp>
 #include <iostream>
+#include <chrono>
 #include <fstream>
 #include <filesystem>
-#include <opencv2/opencv.hpp>
-#include <chrono>
+#include <opencv2/imgcodecs.hpp>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -11,27 +12,29 @@
 #include <unistd.h>
 #endif
 
+namespace fs = std::filesystem;
 using namespace cv;
 using namespace std;
 
 #ifdef _WIN32
 SIZE_T getMemoryUsage() {
-    PROCESS_MEMORY_COUNTERS_EX pmc;
-    GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
-    return pmc.PrivateUsage;
+    PROCESS_MEMORY_COUNTERS pmc;
+    GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc));
+    return pmc.WorkingSetSize;
 }
 #else
-long getMemoryUsage() {
+size_t getMemoryUsage() {
     long rss = 0L;
-    FILE* fp = NULL;
-    if ((fp = fopen("/proc/self/statm", "r")) == NULL)
-        return 0L;
-    if (fscanf(fp, "%*s%ld", &rss) != 1) {
+    FILE* fp = nullptr;
+    if ((fp = fopen("/proc/self/statm", "r")) != nullptr) {
+        if (fscanf(fp, "%*s%ld", &rss) != 1) {
+            fclose(fp);
+            return 0; // Can't read
+        }
         fclose(fp);
-        return 0L;
+        return rss * static_cast<size_t>(sysconf(_SC_PAGESIZE));
     }
-    fclose(fp);
-    return rss * (long)sysconf(_SC_PAGESIZE);
+    return 0; // Can't open
 }
 #endif
 
@@ -147,6 +150,7 @@ int main() {
         cerr << "Image directory does not exist: " << imagePath << endl;
         return -1;
     }
+
     for (const auto& entry : fs::directory_iterator(imagePath)) {
         Mat image = imread(entry.path().string(), IMREAD_COLOR);
         if (image.empty()) {
@@ -184,7 +188,7 @@ int main() {
         sEdge.apply(image, imageSobelEdge);
         stop = chrono::high_resolution_clock::now();
         duration = chrono::duration_cast<chrono::microseconds>(stop - start);
-        ssim = getSSIM(image, imageSobelEdge);  // Note: SSIM for edge detection might not be relevant
+        ssim = getSSIM(image, imageSobelEdge);
         if (image.size() != imageSobelEdge.size() || image.type() != imageSobelEdge.type()) {
             cerr << "Error: Images must be of the same size and type for PSNR calculation." << endl;
             // Resize or convert types if necessary
