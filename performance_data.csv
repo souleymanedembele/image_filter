@@ -1,0 +1,4 @@
+Image,Filter,ExecutionTime,MemoryUsage,SSIM,PSNR
+"peakpx.jpg",Gaussian,16946,,0.982401,35.5607
+"peakpx.jpg",Median,144321,,0.989687,40.0975
+"peakpx.jpg",Sobel,40882,,-1,40.0975

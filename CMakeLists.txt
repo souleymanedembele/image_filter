@@ -29,7 +29,8 @@ if(NOT opencv_POPULATED)
 endif()
 
 # Create your main executable with just main.cpp
-add_executable(Image_Filtering main.cpp)
+add_executable(Image_Filtering main.cpp
+        src/utils/utils.h)
 
 # Define a test executable
 enable_testing()
